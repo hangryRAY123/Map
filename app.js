@@ -7,17 +7,13 @@
     "use strict";
 
     const DATA = (window.CLIENTS_DATA || []).slice();
-    const FILTER_OPTIONS = window.FILTER_OPTIONS || { responsible: [], kkt_types: [], geocode_precision: [] };
 
     // ===== Состояние =====
     const state = {
         checked: new Set(),         // id клиентов с галочкой
         markers: new Map(),         // id -> ymaps.Placemark
         search: "",
-        filterResponsible: "",
-        filterKkt: "",
-        filterPrecision: "",
-        showOnlySelected: false,   // режим «Показать выбранных»
+        showOnlySelected: false,    // режим «Показать выбранных»
     };
 
     // ===== Цвета меток по ответственному =====
@@ -31,6 +27,7 @@
         "nan": "#757575",           // серый
     };
     const DEFAULT_COLOR = "#5a5a5a";
+    const EXTRA_COLOR = "#ff6f00";  // цвет метки для клиентов из файла проверки адресов
 
     // ===== DOM =====
     const $list = document.getElementById("clients-list");
@@ -39,11 +36,8 @@
     const $searchClear = document.getElementById("search-clear");
     const $btnHideAll = document.getElementById("btn-hide-all");
     const $btnShowSelected = document.getElementById("btn-show-selected");
+    const $btnShowAllOnMap = document.getElementById("btn-show-all-on-map");
     const $btnShowAllList = document.getElementById("btn-show-all-list");
-    const $btnResetFilters = document.getElementById("btn-reset-filters");
-    const $filterResponsible = document.getElementById("filter-responsible");
-    const $filterKkt = document.getElementById("filter-kkt");
-    const $filterPrecision = document.getElementById("filter-precision");
     const $statTotal = document.getElementById("stat-total");
     const $statSelected = document.getElementById("stat-selected");
     const $badge = document.getElementById("map-badge");
@@ -51,25 +45,10 @@
     const $sidebar = document.getElementById("sidebar");
     const $tpl = document.getElementById("client-item-template");
 
-    // ===== Заполнение фильтров =====
-    function fillFilterOptions() {
-        const fill = (el, opts) => {
-            opts.forEach(opt => {
-                const o = document.createElement("option");
-                o.value = opt; o.textContent = opt;
-                el.appendChild(o);
-            });
-        };
-        fill($filterResponsible, FILTER_OPTIONS.responsible || []);
-        fill($filterKkt, FILTER_OPTIONS.kkt_types || []);
-        fill($filterPrecision, FILTER_OPTIONS.geocode_precision || []);
-    }
-
     // ===== Карта =====
     let ymap = null;
     function initMap() {
         if (typeof ymaps === "undefined") {
-            // API не загрузился (нет ключа / нет интернета) — покажем заглушку
             const $map = document.getElementById("map");
             $map.innerHTML =
                 '<div style="display:flex;align-items:center;justify-content:center;' +
@@ -91,23 +70,26 @@
                 zoom: 10,
                 controls: ["zoomControl", "fullscreenControl", "typeSelector", "rulerControl"],
             });
-            // Перерисовываем метки
             refreshMarkers();
         });
     }
 
     function colorFor(client) {
+        if (client.is_extra) return EXTRA_COLOR;
         return COLORS[client.responsible] || DEFAULT_COLOR;
     }
 
     function createPlacemark(client) {
         const color = colorFor(client);
+        const extraBadge = client.is_extra
+            ? '<div style="display:inline-block;background:#fff3e0;color:#ff6f00;font-size:10px;padding:1px 6px;border-radius:6px;margin-left:4px;">проверка адреса</div>'
+            : "";
         const pm = new ymaps.Placemark(
             [client.lat, client.lon],
             {
-                balloonContentHeader: escapeHtml(client.name),
+                balloonContentHeader: escapeHtml(client.name) + extraBadge,
                 balloonContentBody:
-                    "<div style='max-width:300px;'>" +
+                    "<div style='max-width:320px;'>" +
                     "<b>Адрес:</b> " + escapeHtml(client.address) + "<br>" +
                     (client.found_address ? "<b>Найденный адрес:</b> " + escapeHtml(client.found_address) + "<br>" : "") +
                     "<b>Ответственный:</b> " + escapeHtml(client.responsible) + "<br>" +
@@ -164,6 +146,26 @@
         updateBadge();
     }
 
+    function addMarker(id) {
+        if (!ymap || state.markers.has(id)) return;
+        const client = DATA.find(c => c.id === id);
+        if (!client) return;
+        const pm = createPlacemark(client);
+        ymap.geoObjects.add(pm);
+        state.markers.set(id, pm);
+        updateBadge();
+    }
+
+    function removeMarker(id) {
+        if (!ymap) return;
+        const pm = state.markers.get(id);
+        if (pm) {
+            ymap.geoObjects.remove(pm);
+            state.markers.delete(id);
+            updateBadge();
+        }
+    }
+
     function updateBadge() {
         $badge.textContent = "меток на карте: " + state.markers.size;
     }
@@ -174,24 +176,19 @@
     }
 
     // ===== Рендер списка =====
-    function passesFilters(client) {
-        if (state.search) {
-            const q = state.search.toLowerCase();
-            const haystack = [
-                client.name, client.address, client.found_address,
-                client.responsible, client.contact, client.kkt_types.join(", "),
-            ].join(" ").toLowerCase();
-            if (!haystack.includes(q)) return false;
-        }
-        if (state.filterResponsible && client.responsible !== state.filterResponsible) return false;
-        if (state.filterKkt && !client.kkt_types.includes(state.filterKkt)) return false;
-        if (state.filterPrecision && client.geocode_precision !== state.filterPrecision) return false;
-        return true;
+    function passesSearch(client) {
+        if (!state.search) return true;
+        const q = state.search.toLowerCase();
+        const haystack = [
+            client.name, client.address, client.found_address,
+            client.responsible, client.contact, client.kkt_types.join(", "),
+        ].join(" ").toLowerCase();
+        return haystack.includes(q);
     }
 
     function shouldShowInList(client) {
         if (state.showOnlySelected && !state.checked.has(client.id)) return false;
-        return passesFilters(client);
+        return passesSearch(client);
     }
 
     function renderList() {
@@ -220,6 +217,7 @@
             $item.dataset.id = client.id;
             $cb.checked = state.checked.has(client.id);
             if ($cb.checked) $item.classList.add("is-checked");
+            if (client.is_extra) $item.classList.add("is-extra");
             $name.textContent = client.name;
             $resp.textContent = client.responsible || "—";
             $addr.textContent = client.address || client.found_address || "";
@@ -237,11 +235,7 @@
             frag.appendChild(node);
         });
         $list.appendChild(frag);
-        if (count === 0) {
-            $empty.classList.remove("hidden");
-        } else {
-            $empty.classList.add("hidden");
-        }
+        $empty.classList.toggle("hidden", count > 0);
         updateStats();
     }
 
@@ -249,13 +243,11 @@
         if (checked) {
             state.checked.add(id);
             $item.classList.add("is-checked");
-            // В режиме «только выбранные» — все элементы и так видны
             addMarker(id);
         } else {
             state.checked.delete(id);
             $item.classList.remove("is-checked");
             removeMarker(id);
-            // Если режим «только выбранные» — убрать из списка
             if (state.showOnlySelected) {
                 $item.remove();
                 if ($list.children.length === 0) $empty.classList.remove("hidden");
@@ -264,37 +256,36 @@
         updateStats();
     }
 
-    function addMarker(id) {
-        if (!ymap || state.markers.has(id)) return;
-        const client = DATA.find(c => c.id === id);
-        if (!client) return;
-        const pm = createPlacemark(client);
-        ymap.geoObjects.add(pm);
-        state.markers.set(id, pm);
-        updateBadge();
-    }
-
-    function removeMarker(id) {
-        if (!ymap) return;
-        const pm = state.markers.get(id);
-        if (pm) {
-            ymap.geoObjects.remove(pm);
-            state.markers.delete(id);
-            updateBadge();
-        }
-    }
-
     function flyToClient(client) {
         if (!ymap) return;
-        // Если метки нет — добавим временно
         const wasChecked = state.checked.has(client.id);
         if (!wasChecked) {
+            state.checked.add(client.id);
             addMarker(client.id);
+            // Обновляем чекбокс в списке
+            const $cb = document.querySelector('.client-item[data-id="' + client.id + '"] .client-checkbox');
+            if ($cb) {
+                $cb.checked = true;
+                $cb.closest(".client-item").classList.add("is-checked");
+            }
+            updateStats();
         }
         ymap.setCenter([client.lat, client.lon], 16, { duration: 400, checkZoomRange: true });
-        // Откроем балун
         const pm = state.markers.get(client.id);
         if (pm) pm.balloon.open();
+    }
+
+    function fitBoundsToMarkers() {
+        if (!ymap || state.markers.size === 0) return;
+        try {
+            ymap.setBounds(ymap.geoObjects.getBounds(), {
+                checkZoomRange: true,
+                duration: 400,
+                zoomMargin: 30,
+            });
+        } catch (e) {
+            // ignore
+        }
     }
 
     // ===== Кнопки =====
@@ -307,49 +298,44 @@
 
     $btnShowSelected.addEventListener("click", () => {
         if (state.checked.size === 0) {
-            // Нет выбранных — ничего не делаем, можно подсветить кнопку
             $btnShowSelected.style.background = "#ffcaca";
             setTimeout(() => $btnShowSelected.style.background = "", 200);
             return;
         }
         state.showOnlySelected = true;
-        // Убираем все метки, потом оставляем только выбранные
         clearAllMarkers();
         state.checked.forEach(id => addMarker(id));
         renderList();
         $btnShowSelected.classList.add("hidden");
+        $btnShowAllOnMap.classList.add("hidden");
+        $btnHideAll.classList.add("hidden");
         $btnShowAllList.classList.remove("hidden");
-        // Подгоним карту под выбранные
-        if (ymap && state.markers.size > 0) {
-            try {
-                ymap.setBounds(ymap.geoObjects.getBounds(), {
-                    checkZoomRange: true,
-                    duration: 400,
-                    zoomMargin: 30,
-                });
-            } catch (e) {
-                // ignore
-            }
+        fitBoundsToMarkers();
+    });
+
+    $btnShowAllOnMap.addEventListener("click", () => {
+        // Отмечаем всех клиентов и показываем на карте
+        state.checked = new Set(DATA.map(c => c.id));
+        clearAllMarkers();
+        state.checked.forEach(id => addMarker(id));
+        if (state.showOnlySelected) {
+            // В режиме "только выбранные" — выходим из него, т.к. выбраны все
+            state.showOnlySelected = false;
+            $btnShowSelected.classList.remove("hidden");
+            $btnShowAllOnMap.classList.remove("hidden");
+            $btnHideAll.classList.remove("hidden");
+            $btnShowAllList.classList.add("hidden");
         }
+        renderList();
+        fitBoundsToMarkers();
     });
 
     $btnShowAllList.addEventListener("click", () => {
         state.showOnlySelected = false;
         $btnShowAllList.classList.add("hidden");
         $btnShowSelected.classList.remove("hidden");
-        renderList();
-    });
-
-    $btnResetFilters.addEventListener("click", () => {
-        state.search = "";
-        state.filterResponsible = "";
-        state.filterKkt = "";
-        state.filterPrecision = "";
-        $search.value = "";
-        $searchClear.classList.remove("visible");
-        $filterResponsible.value = "";
-        $filterKkt.value = "";
-        $filterPrecision.value = "";
+        $btnShowAllOnMap.classList.remove("hidden");
+        $btnHideAll.classList.remove("hidden");
         renderList();
     });
 
@@ -369,20 +355,6 @@
         $search.focus();
     });
 
-    // ===== Фильтры =====
-    $filterResponsible.addEventListener("change", () => {
-        state.filterResponsible = $filterResponsible.value;
-        renderList();
-    });
-    $filterKkt.addEventListener("change", () => {
-        state.filterKkt = $filterKkt.value;
-        renderList();
-    });
-    $filterPrecision.addEventListener("change", () => {
-        state.filterPrecision = $filterPrecision.value;
-        renderList();
-    });
-
     // ===== Бургер на мобильных =====
     $sidebarToggle.addEventListener("click", () => {
         $sidebar.classList.toggle("open");
@@ -390,7 +362,6 @@
     });
 
     // ===== Старт =====
-    fillFilterOptions();
     renderList();
     updateStats();
     initMap();

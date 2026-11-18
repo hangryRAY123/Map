@@ -36,34 +36,13 @@
                 <button class="btn btn-primary" id="btn-show-selected" title="Оставить на карте только отмеченных">
                     Показать выбранных
                 </button>
+                <button class="btn btn-accent" id="btn-show-all-on-map" title="Отметить всех клиентов и показать на карте">
+                    Показать всех на карте
+                </button>
                 <button class="btn btn-ghost hidden" id="btn-show-all-list">
                     ← Показать весь список
                 </button>
             </div>
-
-            <!-- Фильтры -->
-            <details class="filters" open>
-                <summary>Фильтры</summary>
-                <div class="filter-group">
-                    <label class="filter-label">Ответственный</label>
-                    <select id="filter-responsible" class="filter-select">
-                        <option value="">Все</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Тип ККТ</label>
-                    <select id="filter-kkt" class="filter-select">
-                        <option value="">Все</option>
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label class="filter-label">Точность геокодирования</label>
-                    <select id="filter-precision" class="filter-select">
-                        <option value="">Все</option>
-                    </select>
-                </div>
-                <button class="btn btn-link" id="btn-reset-filters">Сбросить фильтры</button>
-            </details>
 
             <!-- Список клиентов -->
             <div class="clients-list" id="clients-list">
