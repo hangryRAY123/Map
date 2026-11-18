@@ -125,6 +125,18 @@ input, select { font-family: inherit; }
     border-color: #d8d8de;
 }
 .btn-secondary:hover { background: #f5f5f7; border-color: #b0b0b8; }
+.btn-warn {
+    background: #fff;
+    color: #c62828;
+    border: 1px solid #c62828;
+}
+.btn-warn:hover { background: #c62828; color: #fff; }
+.btn-warn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #fff;
+    color: #c62828;
+}
 .btn-ghost {
     background: transparent;
     color: #fc3f1d;
