@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Клиенты на карте — Яндекс Карты</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Yandex Maps JS API. Замените API_KEY на свой ключ (см. README.md). -->
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=PASTE_YOUR_API_KEY_HERE&lang=ru_RU"
+            type="text/javascript"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- ===== SIDEBAR ===== -->
+        <aside class="sidebar" id="sidebar">
+            <header class="sidebar-header">
+                <h1>Клиенты</h1>
+                <div class="header-stats">
+                    <span class="stat" id="stat-total">всего: 0</span>
+                    <span class="stat" id="stat-selected">выбрано: 0</span>
+                </div>
+            </header>
+
+            <!-- Поиск -->
+            <div class="search-block">
+                <input type="text" id="search-input" class="search-input"
+                       placeholder="Поиск по клиенту, адресу, контакту…" autocomplete="off">
+                <button class="search-clear" id="search-clear" title="Очистить">×</button>
+            </div>
+
+            <!-- Кнопки управления -->
+            <div class="actions">
+                <button class="btn btn-secondary" id="btn-hide-all" title="Снять все галочки и убрать метки">
+                    Скрыть всех
+                </button>
+                <button class="btn btn-primary" id="btn-show-selected" title="Оставить на карте только отмеченных">
+                    Показать выбранных
+                </button>
+                <button class="btn btn-ghost hidden" id="btn-show-all-list">
+                    ← Показать весь список
+                </button>
+            </div>
+
+            <!-- Фильтры -->
+            <details class="filters" open>
+                <summary>Фильтры</summary>
+                <div class="filter-group">
+                    <label class="filter-label">Ответственный</label>
+                    <select id="filter-responsible" class="filter-select">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Тип ККТ</label>
+                    <select id="filter-kkt" class="filter-select">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Точность геокодирования</label>
+                    <select id="filter-precision" class="filter-select">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <button class="btn btn-link" id="btn-reset-filters">Сбросить фильтры</button>
+            </details>
+
+            <!-- Список клиентов -->
+            <div class="clients-list" id="clients-list">
+                <!-- генерируется JS -->
+            </div>
+
+            <div class="empty-state hidden" id="empty-state">
+                Ничего не найдено
+            </div>
+        </aside>
+
+        <!-- Кнопка-бургер для мобильных -->
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Меню">≡</button>
+
+        <!-- ===== MAP ===== -->
+        <main class="map-container">
+            <div id="map" class="map"></div>
+            <div class="map-badge" id="map-badge">меток на карте: 0</div>
+        </main>
+    </div>
+
+    <!-- Шаблон элемента списка -->
+    <template id="client-item-template">
+        <label class="client-item">
+            <input type="checkbox" class="client-checkbox">
+            <div class="client-info">
+                <div class="client-name"></div>
+                <div class="client-meta">
+                    <span class="client-responsible"></span>
+                    <span class="client-address"></span>
+                </div>
+            </div>
+            <span class="client-pin" title="Показать на карте">📍</span>
+        </label>
+    </template>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
