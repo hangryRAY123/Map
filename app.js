@@ -194,12 +194,79 @@
                 // Для выбранных добавим контур
                 iconStrokeColor: isSelected ? "#000000" : "FFFFFF",
                 iconStrokeWidth: isSelected ? 3 : 1,
+                // Балун НЕ открывается автоматически по клику — мы открываем его при наведении
+                hasBalloon: false,
             }
         );
-        // Клик по метке — добавить/снять выделение (не убирая саму метку)
+
+        // ===== Hover-логика: открыть/закрыть балун при наведении =====
+        // Используем таймер, чтобы дать пользователю время перевести курсор
+        // с метки в балун (для копирования контакта и т.п.).
+        let hoverCloseTimer = null;
+        const cancelClose = () => {
+            if (hoverCloseTimer) {
+                clearTimeout(hoverCloseTimer);
+                hoverCloseTimer = null;
+            }
+        };
+        const openBalloonHover = () => {
+            cancelClose();
+            // Закрыть балун у других меток, чтобы не было наложения
+            for (const [otherId, otherPm] of state.markers) {
+                if (otherId !== client.id && otherPm.balloon && otherPm.balloon.isOpen()) {
+                    otherPm.balloon.close();
+                }
+            }
+            // hasBalloon:false отключает стандартный балун, поэтому открываем вручную
+            // через ymaps.balloon карты, привязывая к координатам метки.
+            if (ymap && ymap.balloon) {
+                ymap.balloon.open(
+                    [client.lat, client.lon],
+                    {
+                        contentHeader: escapeHtml(client.name) + extraBadge + selectedBadge,
+                        contentBody:
+                            "<div style='max-width:320px;'>" +
+                            "<b>Адрес:</b> " + escapeHtml(client.address) + "<br>" +
+                            (client.found_address ? "<b>Найденный адрес:</b> " + escapeHtml(client.found_address) + "<br>" : "") +
+                            "<b>Ответственный:</b> " + escapeHtml(client.responsible) + "<br>" +
+                            "<b>Количество ККТ:</b> " + client.kkt_count + "<br>" +
+                            (client.kkt_types.length ? "<b>Типы ККТ:</b> " + escapeHtml(client.kkt_types.join(", ")) + "<br>" : "") +
+                            (client.contact ? "<b>Контакт:</b> " + escapeHtml(client.contact) + "<br>" : "") +
+                            "<hr style='margin:6px 0;'>" +
+                            "<div style='font-size:11px;color:#888;'>" +
+                            (state.checked.has(client.id)
+                                ? "✓ Клиент в списке выбранных. Клик по метке снимет выделение."
+                                : "Клик по метке — добавить в выбранные") +
+                            "</div>" +
+                            "</div>",
+                    },
+                    {
+                        closeButton: false,
+                        // Не сдвигать карту при открытии балуна
+                        autoPan: false,
+                    }
+                );
+            }
+        };
+        const scheduleCloseBalloon = () => {
+            cancelClose();
+            hoverCloseTimer = setTimeout(() => {
+                if (ymap && ymap.balloon && ymap.balloon.isOpen()) {
+                    ymap.balloon.close();
+                }
+                hoverCloseTimer = null;
+            }, 250);
+        };
+
+        pm.events.add("mouseenter", openBalloonHover);
+        pm.events.add("mouseleave", scheduleCloseBalloon);
+
+        // Клик по метке — добавить/снять выделение (балун уже открыт при наведении)
         pm.events.add("click", () => {
             const newChecked = !state.checked.has(client.id);
             toggleChecked(client.id, newChecked);
+            // После клика обновим содержимое балуна (он открыт при наведении)
+            setTimeout(openBalloonHover, 0);
         });
         return pm;
     }
@@ -436,8 +503,31 @@
             addMarker(client.id);
         }
         ymap.setCenter([client.lat, client.lon], 16, { duration: 400, checkZoomRange: true });
-        const pm = state.markers.get(client.id);
-        if (pm) pm.balloon.open();
+        // Открываем балун через карту (у метки hasBalloon:false)
+        const extraBadge = client.is_extra
+            ? '<div style="display:inline-block;background:#fff3e0;color:#ff6f00;font-size:10px;padding:1px 6px;border-radius:6px;margin-left:4px;">проверка адреса</div>'
+            : "";
+        const selectedBadge = state.checked.has(client.id)
+            ? '<div style="display:inline-block;background:#000;color:#fff;font-size:10px;padding:1px 6px;border-radius:6px;margin-left:4px;">✓ выбран</div>'
+            : "";
+        if (ymap.balloon) {
+            ymap.balloon.open(
+                [client.lat, client.lon],
+                {
+                    contentHeader: escapeHtml(client.name) + extraBadge + selectedBadge,
+                    contentBody:
+                        "<div style='max-width:320px;'>" +
+                        "<b>Адрес:</b> " + escapeHtml(client.address) + "<br>" +
+                        (client.found_address ? "<b>Найденный адрес:</b> " + escapeHtml(client.found_address) + "<br>" : "") +
+                        "<b>Ответственный:</b> " + escapeHtml(client.responsible) + "<br>" +
+                        "<b>Количество ККТ:</b> " + client.kkt_count + "<br>" +
+                        (client.kkt_types.length ? "<b>Типы ККТ:</b> " + escapeHtml(client.kkt_types.join(", ")) + "<br>" : "") +
+                        (client.contact ? "<b>Контакт:</b> " + escapeHtml(client.contact) + "<br>" : "") +
+                        "</div>",
+                },
+                { closeButton: true, autoPan: true }
+            );
+        }
     }
 
     // ===== Кнопки =====
